@@ -1,92 +1,111 @@
+import { db } from '../config/firebase';
 import { 
   collection, 
+  doc, 
+  getDocs, 
+  getDoc, 
   addDoc, 
   updateDoc, 
-  deleteDoc, 
-  doc, 
-  getDocs 
+  deleteDoc,
+  query, 
+  where, 
+  orderBy
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
 
-class CategoryService {
-  constructor() {
-    this.collectionName = 'categories';
-  }
-
+const CategoryService = {
+  // Obtener todas las categorías
   async getAllCategories() {
     try {
-      const querySnapshot = await getDocs(collection(db, this.collectionName));
-      const categories = querySnapshot.docs.map(doc => ({
+      const categoriesQuery = query(
+        collection(db, 'categories'),
+        orderBy('name', 'asc')
+      );
+      const querySnapshot = await getDocs(categoriesQuery);
+      return querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      
-      // Ordenar alfabéticamente por nombre
-      categories.sort((a, b) => a.name.localeCompare(b.name));
-      
-      return categories;
     } catch (error) {
-      console.error('Error al obtener categorías:', error);
-      throw new Error('Error al obtener categorías: ' + error.message);
+      console.error('Error getting all categories:', error);
+      throw error;
     }
-  }
+  },
 
-  async createCategory(categoryData) {
+  // Obtener categoría por ID
+  async getCategoryById(categoryId) {
     try {
-      const categoryWithTimestamp = {
-        name: categoryData.name.trim(),
-        description: categoryData.description?.trim() || '',
-        createdAt: new Date()
-      };
-      
-      const docRef = await addDoc(collection(db, this.collectionName), categoryWithTimestamp);
-      console.log('✅ Categoría creada:', docRef.id);
-      return docRef.id;
-    } catch (error) {
-      console.error('Error al crear categoría:', error);
-      throw new Error('Error al crear categoría: ' + error.message);
-    }
-  }
-
-  async updateCategory(id, categoryData) {
-    try {
-      const updateData = {
-        name: categoryData.name.trim(),
-        description: categoryData.description?.trim() || ''
-      };
-      
-      await updateDoc(doc(db, this.collectionName, id), updateData);
-      console.log('✅ Categoría actualizada:', id);
-    } catch (error) {
-      console.error('Error al actualizar categoría:', error);
-      throw new Error('Error al actualizar categoría: ' + error.message);
-    }
-  }
-
-  async deleteCategory(id) {
-    try {
-      await deleteDoc(doc(db, this.collectionName, id));
-      console.log('✅ Categoría eliminada:', id);
-    } catch (error) {
-      console.error('Error al eliminar categoría:', error);
-      throw new Error('Error al eliminar categoría: ' + error.message);
-    }
-  }
-
-  async getCategoryById(id) {
-    try {
-      const docRef = doc(db, this.collectionName, id);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() };
+      const categoryDoc = await getDoc(doc(db, 'categories', categoryId));
+      if (categoryDoc.exists()) {
+        return { id: categoryDoc.id, ...categoryDoc.data() };
       }
       return null;
     } catch (error) {
-      console.error('Error al obtener categoría:', error);
-      throw new Error('Error al obtener categoría: ' + error.message);
+      console.error('Error getting category by ID:', error);
+      throw error;
+    }
+  },
+
+  // Crear nueva categoría
+  async createCategory(categoryData) {
+    try {
+      const categoryWithTimestamp = {
+        ...categoryData,
+        createdAt: new Date(),
+        isActive: true
+      };
+      const docRef = await addDoc(collection(db, 'categories'), categoryWithTimestamp);
+      return { id: docRef.id, ...categoryData };
+    } catch (error) {
+      console.error('Error creating category:', error);
+      throw error;
+    }
+  },
+
+  // Actualizar categoría
+  async updateCategory(categoryId, categoryData) {
+    try {
+      const categoryRef = doc(db, 'categories', categoryId);
+      await updateDoc(categoryRef, categoryData);
+      return true;
+    } catch (error) {
+      console.error('Error updating category:', error);
+      throw error;
+    }
+  },
+
+  // Eliminar categoría (soft delete)
+  async deleteCategory(categoryId) {
+    try {
+      const categoryRef = doc(db, 'categories', categoryId);
+      await updateDoc(categoryRef, {
+        isActive: false,
+        deletedAt: new Date()
+      });
+      return true;
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      throw error;
+    }
+  },
+
+  // Obtener categorías activas
+  async getActiveCategories() {
+    try {
+      const categoriesQuery = query(
+        collection(db, 'categories'),
+        where('isActive', '==', true),
+        orderBy('name', 'asc')
+      );
+      const querySnapshot = await getDocs(categoriesQuery);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.error('Error getting active categories:', error);
+      throw error;
     }
   }
-}
+};
 
-export default new CategoryService();
+export default CategoryService;

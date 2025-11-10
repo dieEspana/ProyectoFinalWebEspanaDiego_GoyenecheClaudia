@@ -38,63 +38,71 @@ const AdminDashboard = () => {
   }, [user]);
 
   const userRole = userData?.role || user?.role;
+useEffect(() => {
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      if (!user) return;
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
+      // SOLO CARGAR NOTICIAS PRIMERO
+      let recent = [];
       try {
-        setLoading(true);
-        
-        // Obtener usuarios activos
-        const activeUsers = await UserService.getActiveUsersCount();
-        
-        // Obtener noticias del mes
-        const monthlyNews = await NewsService.getMonthlyNewsCount();
-        
-        // Obtener noticias del usuario actual
-        const userNews = user ? await NewsService.getNewsByAuthor(user.uid) : [];
-        
-        // Obtener todas las noticias para estadísticas
-        const allNews = await NewsService.getAllNews();
-        
-        // Obtener noticias pendientes (solo para editores)
-        let pendingNews = 0;
-        if (userRole === 'editor') {
+        recent = await NewsService.getRecentNews(10);
+        console.log('✅ NOTICIAS CARGADAS:', recent);
+      } catch (error) {
+        console.error('❌ ERROR CARGANDO NOTICIAS:', error);
+      }
+
+      // Cargar el resto de datos después
+      const [
+        activeUsers,
+        userNews,
+        categories
+        // unreadNotifications // 👈 COMENTA ESTA LÍNEA TEMPORALMENTE
+      ] = await Promise.all([
+        UserService.getActiveUsersCount().catch(() => 0),
+        user ? NewsService.getNewsByAuthor(user.uid).catch(() => []) : Promise.resolve([]),
+        CategoryService.getAllCategories().catch(() => [])
+        // NotificationService.getUnreadCount(user.uid, userRole).catch(() => 0) // 👈 Y ESTA
+      ]);
+
+      let pendingNews = 0;
+      if (userRole === 'editor') {
+        try {
           const pending = await NewsService.getNewsByStatus('terminado');
           pendingNews = pending.length;
+        } catch (error) {
+          console.error('Error getting pending news:', error);
         }
-
-        // Obtener categorías
-        const categories = await CategoryService.getAllCategories();
-
-        // Obtener notificaciones no leídas
-        const unreadNotifications = await NotificationService.getUnreadCount(user.uid, userRole);
-
-        // Obtener noticias recientes (últimas 5)
-        const recent = allNews.slice(0, 5);
-
-        setStats({
-          activeUsers,
-          monthlyNews,
-          userNews: userNews.length,
-          pendingNews,
-          totalNews: allNews.length,
-          totalCategories: categories.length,
-          unreadNotifications
-        });
-
-        setRecentNews(recent);
-      } catch (error) {
-        console.error('Error cargando datos del dashboard:', error);
-      } finally {
-        setLoading(false);
       }
-    };
 
-    if (user) {
-      loadDashboardData();
+      setStats({
+        activeUsers,
+        monthlyNews: 0, // Temporalmente 0 por el índice
+        userNews: userNews.length,
+        pendingNews,
+        totalNews: recent.length,
+        totalCategories: categories.length,
+        unreadNotifications: 0 // 👈 PON 0 TEMPORALMENTE
+      });
+
+      setRecentNews(recent);
+      
+      console.log('🎉 DASHBOARD CARGADO EXITOSAMENTE!');
+      console.log('📰 Noticias recientes:', recent);
+      
+    } catch (error) {
+      console.error('Error cargando dashboard:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [user, userRole]);
+  };
 
+  if (user) {
+    loadDashboardData();
+  }
+}, [user, userRole]);
   const reporterStats = [
     { 
       label: 'Mis Noticias', 
@@ -127,43 +135,42 @@ const AdminDashboard = () => {
   ];
 
   const editorStats = [
-    { 
-      label: 'Noticias Pendientes', 
-      value: stats.pendingNews, 
-      color: 'from-orange-500 to-orange-600',
-      icon: '👁️',
-      description: 'Esperando revisión'
-    },
-    { 
-      label: 'Notificaciones', 
-      value: stats.unreadNotifications, 
-      color: 'from-red-500 to-red-600',
-      icon: '🔔',
-      description: 'Pendientes de revisar'
-    },
-    { 
-      label: 'Noticias del Mes', 
-      value: stats.monthlyNews, 
-      color: 'from-green-500 to-green-600',
-      icon: '📈',
-      description: 'Total publicadas este mes'
-    },
-    { 
-      label: 'Usuarios Activos', 
-      value: stats.activeUsers, 
-      color: 'from-purple-500 to-purple-600',
-      icon: '👥',
-      description: 'Usuarios registrados'
-    },
-    { 
-      label: 'Total Noticias', 
-      value: stats.totalNews, 
-      color: 'from-blue-500 to-blue-600',
-      icon: '📰',
-      description: 'En el sistema'
-    }
-  ];
-
+  { 
+    label: 'Noticias Pendientes', 
+    value: stats.pendingNews, 
+    color: 'from-orange-500 to-orange-600',
+    icon: '👁️',
+    description: 'Esperando revisión'
+  },
+  // {  // 👈 COMENTA ESTE TEMPORALMENTE
+  //   label: 'Notificaciones', 
+  //   value: stats.unreadNotifications, 
+  //   color: 'from-red-500 to-red-600',
+  //   icon: '🔔',
+  //   description: 'Pendientes de revisar'
+  // },
+  { 
+    label: 'Noticias del Mes', 
+    value: stats.monthlyNews, 
+    color: 'from-green-500 to-green-600',
+    icon: '📈',
+    description: 'Total publicadas este mes'
+  },
+  { 
+    label: 'Usuarios Activos', 
+    value: stats.activeUsers, 
+    color: 'from-purple-500 to-purple-600',
+    icon: '👥',
+    description: 'Usuarios registrados'
+  },
+  { 
+    label: 'Total Noticias', 
+    value: stats.totalNews, 
+    color: 'from-blue-500 to-blue-600',
+    icon: '📰',
+    description: 'En el sistema'
+  }
+];
   const getStatusBadge = (status) => {
     const statusConfig = {
       edicion: { label: 'En Edición', class: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
@@ -182,12 +189,36 @@ const AdminDashboard = () => {
 
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
-    return new Date(timestamp.toDate()).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
+    
+    try {
+      // Si es un timestamp de Firestore
+      if (timestamp.toDate) {
+        return timestamp.toDate().toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+      }
+      
+      // Si es un string de fecha
+      if (typeof timestamp === 'string') {
+        return new Date(timestamp).toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+      }
+      
+      return 'Fecha no válida';
+    } catch (error) {
+      console.error('Error formateando fecha:', error);
+      return 'Error en fecha';
+    }
   };
+
+  // Debug: mostrar datos en consola
+  console.log('🔍 DEBUG - Recent News:', recentNews);
+  console.log('🔍 DEBUG - Stats:', stats);
 
   if (loading) {
     return (
@@ -440,105 +471,82 @@ const AdminDashboard = () => {
                   Acciones Rápidas
                 </h3>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                  {userRole === 'reporter' && (
-                    <>
-                      <Link 
-                        to="/admin/news/create" 
-                        className="group bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-5 rounded-2xl border-2 border-blue-200 hover:border-blue-400 hover:from-blue-100 hover:to-blue-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
-                            📝
-                          </div>
-                          <div>
-                            <div className="font-bold text-blue-900 text-base md:text-lg">Crear Noticia</div>
-                            <div className="text-xs md:text-sm text-blue-700">Redactar nueva publicación</div>
-                          </div>
-                        </div>
-                      </Link>
-                      
-                      <Link 
-                        to="/admin/news" 
-                        className="group bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-5 rounded-2xl border-2 border-green-200 hover:border-green-400 hover:from-green-100 hover:to-green-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 md:w-12 md:h-12 bg-green-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
-                            📋
-                          </div>
-                          <div>
-                            <div className="font-bold text-green-900 text-base md:text-lg">Mis Noticias</div>
-                            <div className="text-xs md:text-sm text-green-700">Gestionar publicaciones</div>
-                          </div>
-                        </div>
-                      </Link>
-                    </>
-                  )}
-
-                  {/* Common Actions */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                  {/* Acción 1: Crear Noticia / Ver Noticias */}
                   <Link 
-                    to="/admin/profile" 
-                    className="group bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-5 rounded-2xl border-2 border-gray-200 hover:border-gray-400 hover:from-gray-100 hover:to-gray-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
+                    to={userRole === 'reporter' ? "/admin/news/create" : "/admin/news"} 
+                    className="group bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-5 rounded-2xl border-2 border-blue-200 hover:border-blue-400 hover:from-blue-100 hover:to-blue-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 md:w-12 md:h-12 bg-gray-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
+                      <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
+                        {userRole === 'reporter' ? '📝' : '📰'}
+                      </div>
+                      <div>
+                        <div className="font-bold text-blue-900 text-base md:text-lg">
+                          {userRole === 'reporter' ? 'Crear Noticia' : 'Ver Noticias'}
+                        </div>
+                        <div className="text-xs md:text-sm text-blue-700">
+                          {userRole === 'reporter' ? 'Redactar nueva publicación' : 'Gestionar todas las noticias'}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Acción 2: Mis Noticias / Revisar Pendientes */}
+                  <Link 
+                    to={userRole === 'reporter' ? "/admin/news" : "/admin/news?status=terminado"} 
+                    className="group bg-gradient-to-br from-green-50 to-green-100 p-4 md:p-5 rounded-2xl border-2 border-green-200 hover:border-green-400 hover:from-green-100 hover:to-green-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 md:w-12 md:h-12 bg-green-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
+                        {userRole === 'reporter' ? '📋' : '👁️'}
+                      </div>
+                      <div>
+                        <div className="font-bold text-green-900 text-base md:text-lg">
+                          {userRole === 'reporter' ? 'Mis Noticias' : 'Revisar Pendientes'}
+                        </div>
+                        <div className="text-xs md:text-sm text-green-700">
+                          {userRole === 'reporter' ? 'Gestionar publicaciones' : `${stats.pendingNews} en espera`}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Acción 3: Mi Perfil */}
+                  <Link 
+                    to="/admin/profile" 
+                    className="group bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-5 rounded-2xl border-2 border-purple-200 hover:border-purple-400 hover:from-purple-100 hover:to-purple-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
                         👤
                       </div>
                       <div>
-                        <div className="font-bold text-gray-900 text-base md:text-lg">Mi Perfil</div>
-                        <div className="text-xs md:text-sm text-gray-700">Actualizar información</div>
+                        <div className="font-bold text-purple-900 text-base md:text-lg">Mi Perfil</div>
+                        <div className="text-xs md:text-sm text-purple-700">Actualizar información</div>
                       </div>
                     </div>
                   </Link>
 
+                  {/* Acción 4: Reportes / Categorías */}
                   <Link 
-                    to="/admin/reports" 
-                    className="group bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 md:p-5 rounded-2xl border-2 border-indigo-200 hover:border-indigo-400 hover:from-indigo-100 hover:to-indigo-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
+                    to={userRole === 'reporter' ? "/admin/reports" : "/admin/categories"} 
+                    className="group bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-5 rounded-2xl border-2 border-orange-200 hover:border-orange-400 hover:from-orange-100 hover:to-orange-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 md:w-12 md:h-12 bg-indigo-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
-                        📊
+                      <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
+                        {userRole === 'reporter' ? '📊' : '🗂️'}
                       </div>
                       <div>
-                        <div className="font-bold text-indigo-900 text-base md:text-lg">Reportes</div>
-                        <div className="text-xs md:text-sm text-indigo-700">Ver estadísticas</div>
+                        <div className="font-bold text-orange-900 text-base md:text-lg">
+                          {userRole === 'reporter' ? 'Reportes' : 'Categorías'}
+                        </div>
+                        <div className="text-xs md:text-sm text-orange-700">
+                          {userRole === 'reporter' ? 'Ver estadísticas' : `${stats.totalCategories} activas`}
+                        </div>
                       </div>
                     </div>
                   </Link>
-                  
-                  {userRole === 'editor' && (
-                    <>
-                      <Link 
-                        to="/admin/news" 
-                        className="group bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-5 rounded-2xl border-2 border-orange-200 hover:border-orange-400 hover:from-orange-100 hover:to-orange-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
-                            👁️
-                          </div>
-                          <div>
-                            <div className="font-bold text-orange-900 text-base md:text-lg">Revisar Noticias</div>
-                            <div className="text-xs md:text-sm text-orange-700">{stats.pendingNews} pendientes</div>
-                          </div>
-                        </div>
-                      </Link>
-                      
-                      <Link 
-                        to="/admin/categories" 
-                        className="group bg-gradient-to-br from-purple-50 to-purple-100 p-4 md:p-5 rounded-2xl border-2 border-purple-200 hover:border-purple-400 hover:from-purple-100 hover:to-purple-200 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-500 rounded-xl flex items-center justify-center text-white text-base md:text-lg">
-                            🗂️
-                          </div>
-                          <div>
-                            <div className="font-bold text-purple-900 text-base md:text-lg">Gestionar Categorías</div>
-                            <div className="text-xs md:text-sm text-purple-700">{stats.totalCategories} activas</div>
-                          </div>
-                        </div>
-                      </Link>
-                    </>
-                  )}
                 </div>
               </div>
 
@@ -547,13 +555,18 @@ const AdminDashboard = () => {
                 <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center">
                   <span className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center text-white mr-3 text-sm md:text-base">📰</span>
                   Noticias Recientes
+                  {recentNews.length > 0 && (
+                    <span className="ml-2 bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full">
+                      {recentNews.length} noticias
+                    </span>
+                  )}
                 </h3>
                 
                 {recentNews.length === 0 ? (
                   <div className="text-center py-8 md:py-12">
                     <div className="text-5xl md:text-6xl mb-4">📭</div>
                     <h4 className="text-lg md:text-xl font-bold text-gray-700 mb-2">No hay noticias recientes</h4>
-                    <p className="text-gray-500 mb-6">Las noticias creadas aparecerán aquí</p>
+                    <p className="text-gray-500 mb-6">Aún no se han creado noticias en el sistema</p>
                     <Link 
                       to="/admin/news/create" 
                       className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 md:px-8 py-3 rounded-2xl font-bold hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105 shadow-lg text-sm md:text-base"
@@ -562,43 +575,79 @@ const AdminDashboard = () => {
                     </Link>
                   </div>
                 ) : (
-                  <div className="space-y-3 md:space-y-4">
-                    {recentNews.map((newsItem) => (
+                  <div className="space-y-4 md:space-y-6">
+                    {recentNews.map((newsItem, index) => (
                       <div 
-                        key={newsItem.id} 
-                        className="group bg-gradient-to-r from-gray-50 to-white p-3 md:p-4 rounded-2xl border border-gray-200 hover:border-blue-300 hover:from-blue-50 hover:to-white transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
+                        key={newsItem.id || index} 
+                        className="group bg-gradient-to-r from-gray-50 to-white p-4 md:p-6 rounded-2xl border-2 border-gray-200 hover:border-blue-300 hover:from-blue-50 hover:to-white transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg"
                       >
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-2 md:space-y-0">
+                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                          {/* Información principal */}
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
+                            <div className="flex flex-wrap items-center gap-2 mb-3">
                               {getStatusBadge(newsItem.status)}
-                              <span className="text-xs text-gray-500 font-medium">
+                              <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">
                                 {formatDate(newsItem.createdAt)}
                               </span>
+                              {newsItem.category && (
+                                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-bold">
+                                  {newsItem.category}
+                                </span>
+                              )}
                             </div>
-                            <h4 className="font-bold text-gray-900 text-base md:text-lg mb-1 line-clamp-1">
-                              {newsItem.title}
+                            
+                            <h4 className="font-bold text-gray-900 text-lg md:text-xl mb-2 line-clamp-2">
+                              {newsItem.title || 'Título no disponible'}
                             </h4>
-                            <p className="text-gray-600 text-sm line-clamp-2">
-                              {newsItem.subtitle}
+                            
+                            <p className="text-gray-600 text-sm md:text-base mb-3 line-clamp-3">
+                              {newsItem.subtitle || newsItem.content || 'Descripción no disponible'}
                             </p>
-                          </div>
-                          <div className="text-right mt-2 md:mt-0">
-                            <div className="bg-blue-100 text-blue-800 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm font-bold mb-2">
-                              {newsItem.category}
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm text-gray-500">
+                                por <span className="font-medium">{newsItem.author?.name || newsItem.author?.email || 'Usuario desconocido'}</span>
+                              </div>
+                              
+                              <Link 
+                                to={`/admin/news/edit/${newsItem.id}`}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                              >
+                                Ver detalles →
+                              </Link>
                             </div>
-                            <div className="text-xs text-gray-500">por {newsItem.authorName}</div>
+                          </div>
+                          
+                          {/* Estado y acciones rápidas */}
+                          <div className="flex flex-col items-end gap-2">
+                            <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              newsItem.status === 'publicado' ? 'bg-green-100 text-green-800' :
+                              newsItem.status === 'terminado' ? 'bg-orange-100 text-orange-800' :
+                              newsItem.status === 'edicion' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {newsItem.status?.toUpperCase() || 'DESCONOCIDO'}
+                            </div>
+                            
+                            {newsItem.updatedAt && (
+                              <div className="text-xs text-gray-400 text-right">
+                                Actualizado: {formatDate(newsItem.updatedAt)}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
                     ))}
                     
-                    <Link 
-                      to="/admin/news" 
-                      className="block text-center bg-gray-100 text-gray-700 font-bold py-3 md:py-4 rounded-2xl hover:bg-gray-200 hover:text-gray-900 transition-all duration-300 transform hover:scale-105 text-sm md:text-base"
-                    >
-                      Ver todas las noticias →
-                    </Link>
+                    {/* Botón para ver todas las noticias */}
+                    <div className="pt-4 border-t border-gray-200">
+                      <Link 
+                        to="/admin/news" 
+                        className="block text-center bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold py-4 rounded-2xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                      >
+                        📋 Ver todas las noticias ({stats.totalNews})
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
@@ -706,13 +755,19 @@ const AdminDashboard = () => {
                 { 
                   number: '3', 
                   title: userRole === 'editor' ? 'Gestionar Categorías' : 'Organizar Contenido',
-                  desc: userRole === 'editor' ? 'Organiza las secciones del sitio' : 'Clasifica tus noticias correctamente'
+                  desc: userRole === 'editor' ? 'Administra las secciones del sitio' : 'Clasifica tus publicaciones'
                 }
               ].map((step, index) => (
-                <div key={index} className="bg-white bg-opacity-20 rounded-2xl p-4 md:p-6 backdrop-blur-sm border border-white border-opacity-30 hover:bg-opacity-30 transition-all duration-300">
-                  <div className="text-xl md:text-2xl font-bold mb-2 md:mb-3">{step.number}</div>
-                  <div className="font-bold text-base md:text-lg mb-1 md:mb-2">{step.title}</div>
-                  <div className="text-green-100 text-xs md:text-sm">{step.desc}</div>
+                <div key={index} className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 md:p-6 hover:bg-white/30 transition-all duration-300 transform hover:-translate-y-1">
+                  <div className="flex items-center space-x-3 md:space-x-4">
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-white/30 rounded-2xl flex items-center justify-center text-white font-bold text-lg md:text-xl">
+                      {step.number}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-lg md:text-xl mb-1">{step.title}</h4>
+                      <p className="text-green-100 text-sm md:text-base">{step.desc}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
